@@ -86,26 +86,10 @@ def goal_outflow_for_year(age: int, inp: Inputs) -> Dict[str, float]:
             years_to_inflate = max(years_to_inflate, 0)
             outflows["marriage"] += child.marriage_cost_today * (1 + inp.general_inflation) ** years_to_inflate
 
-    # Car upgrades, inflated at car_inflation.
-    # Pre-retirement: recurring every N years from today (unchanged).
-    # Post-retirement: capped at a maximum of 3 car purchases, with the last
-    # one anchored at age 65 and earlier ones stepping back every N years
-    # from there (e.g. N=6 -> candidate ages 53, 59, 65). Only candidate ages
-    # that actually fall at/after retirement are kept, so if retirement is
-    # after 65 there may be fewer than 3 (or zero) post-retirement cars.
-    if inp.car_upgrade_every_n_years > 0:
-        if age < inp.retirement_age:
-            if years_from_now > 0 and years_from_now % inp.car_upgrade_every_n_years == 0:
-                outflows["car"] += inp.car_cost_today * (1 + inp.car_inflation) ** years_from_now
-        else:
-            post_retirement_car_ages = [
-                65 - 2 * inp.car_upgrade_every_n_years,
-                65 - inp.car_upgrade_every_n_years,
-                65,
-            ]
-            post_retirement_car_ages = [a for a in post_retirement_car_ages if a >= inp.retirement_age]
-            if age in post_retirement_car_ages:
-                outflows["car"] += inp.car_cost_today * (1 + inp.car_inflation) ** years_from_now
+    # Car upgrades, inflated at car_inflation, recurring every N years from today
+    if inp.car_upgrade_every_n_years > 0 and years_from_now > 0:
+        if years_from_now % inp.car_upgrade_every_n_years == 0:
+            outflows["car"] += inp.car_cost_today * (1 + inp.car_inflation) ** years_from_now
 
     # House purchase, one-time
     if (not inp.owns_house) and age == inp.house_purchase_age:
@@ -316,7 +300,6 @@ with st.sidebar:
 
     car_cost_today = st.number_input("Car cost, today's value (₹)", 0, value=30_00_000, step=1_00_000, format="%d")
     car_upgrade_every_n_years = st.number_input("Upgrade car every N years (0 = never)", 0, 20, 6)
-    st.caption("Post-retirement car purchases are capped at a maximum of 3, with the last one at age 65.")
 
     st.header("Other Obligations")
     existing_emi_monthly = st.number_input("Existing EMI, monthly (₹)", 0, value=0, step=5_000, format="%d")
@@ -380,17 +363,16 @@ if run_button or "has_run" in st.session_state:
 
     # ── Top-line metrics ──
     st.subheader("Headline Results")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Net worth at retirement", f"₹{net_worth_at_retirement/1e7:,.2f} Cr")
     col2.metric("Legacy at life expectancy (nominal)", f"₹{legacy_nominal/1e7:,.2f} Cr")
-    col3.metric("Legacy at life expectancy (today's terms)", f"₹{legacy_real/1e7:,.2f} Cr")
-    col4.metric("Probability corpus survives to life expectancy", f"{survival_prob*100:.0f}%")
+    col3.metric("Probability corpus survives to life expectancy", f"{survival_prob*100:.0f}%")
     if children:
         per_child = max(legacy_nominal, 0) / len(children)
         child_breakdown = ", ".join([f"{c.name}: ₹{per_child/1e7:,.2f} Cr" for c in children])
-        col5.metric("Legacy split per child (nominal)", f"₹{per_child/1e7:,.2f} Cr each")
+        col4.metric("Legacy split per child (nominal)", f"₹{per_child/1e7:,.2f} Cr each")
     else:
-        col5.metric("Legacy split per child", "No children added")
+        col4.metric("Legacy split per child", "No children added")
 
     if children and len(children) > 1:
         st.caption("Per-child split (equal): " + ", ".join([f"**{c.name}**: ₹{max(legacy_nominal,0)/len(children)/1e7:,.2f} Cr" for c in children]))
