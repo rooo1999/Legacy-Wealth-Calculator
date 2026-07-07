@@ -364,11 +364,11 @@ with st.sidebar:
     st.caption("Once each child turns 18, expenses step down 25% (permanently) and that amount shifts into savings until retirement — the education lump sum is already accounted for separately below.")
 
     st.header("Return & Inflation Assumptions")
-    pre_retirement_return = st.slider("Pre-retirement return (%)", 4.0, 16.0, 10.0) / 100
+    pre_retirement_return = st.slider("Pre-retirement return (%)", 4.0, 16.0, 11.0) / 100
     post_retirement_return = st.slider("Post-retirement return (%)", 3.0, 12.0, 7.5) / 100
     income_growth_rate = st.slider("Annual savings growth (%)", 0.0, 15.0, 10.0) / 100
     general_inflation = st.slider("General inflation (%)", 2.0, 10.0, 6.0) / 100
-    lifestyle_inflation = st.slider("Lifestyle inflation, pre-retirement only (%)", 0.0, 15.0, 5.0) / 100
+    lifestyle_inflation = st.slider("Lifestyle inflation, pre-retirement only (%)", 0.0, 15.0, 10.0) / 100
     st.caption("Lifestyle inflation compounds on top of general inflation while working, and stops the moment the client retires.")
     education_inflation = st.slider("Education inflation (%)", 4.0, 16.0, 10.0) / 100
     car_inflation = st.slider("Car cost inflation (%)", 2.0, 12.0, 5.0) / 100
