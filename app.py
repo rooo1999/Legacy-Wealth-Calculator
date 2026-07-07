@@ -184,10 +184,13 @@ def run_deterministic_projection(inp: Inputs):
             outflow = goal_total + emi + parent_support + healthcare_loading
             net_worth = net_worth * (1 + ret_rate) + inflow - outflow
             annual_savings *= (1 + inp.income_growth_rate)
-            # lifestyle inflation compounds on top of general inflation, but
-            # only while still working -- it stops the moment the client retires
-            annual_expense *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
-            expense_no_cuts *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
+            # lifestyle inflation is a step-up applied once every 3 years
+            # (not every year), and only while still working -- it stops the
+            # moment the client retires
+            years_from_now = age - inp.current_age
+            lifestyle_step = (1 + inp.lifestyle_inflation) if (years_from_now > 0 and years_from_now % 3 == 0) else 1.0
+            annual_expense *= (1 + inp.general_inflation) * lifestyle_step
+            expense_no_cuts *= (1 + inp.general_inflation) * lifestyle_step
             diverted_to_savings *= (1 + inp.general_inflation)
         else:
             # withdrawal grossed up for capital gains tax drag
@@ -312,8 +315,10 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
             if not is_retired:
                 net_worth = net_worth * (1 + ret_rate) + annual_savings + diverted_to_savings - goal_total - emi - parent_support - healthcare_loading
                 annual_savings *= (1 + inp.income_growth_rate)
-                annual_expense *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
-                expense_no_cuts *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
+                years_from_now = age - inp.current_age
+                lifestyle_step = (1 + inp.lifestyle_inflation) if (years_from_now > 0 and years_from_now % 3 == 0) else 1.0
+                annual_expense *= (1 + inp.general_inflation) * lifestyle_step
+                expense_no_cuts *= (1 + inp.general_inflation) * lifestyle_step
                 diverted_to_savings *= (1 + inp.general_inflation)
             else:
                 withdrawal_needed = annual_expense + healthcare_loading + goal_total + parent_support + emi
