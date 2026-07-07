@@ -128,6 +128,14 @@ def run_deterministic_projection(inp: Inputs):
     annual_savings = inp.monthly_savings * 12
     annual_expense = inp.monthly_expenses * 12
 
+    # Parallel "no cuts" trajectory: what expenses would be this year if
+    # only inflation applied (no child-turns-18 reductions). Each cut is
+    # sized off this year's value on that trajectory, not off the
+    # already-reduced running annual_expense -- so a second child turning 18
+    # in a later year still gets a full 25% cut of that year's natural
+    # expense level, rather than 25% of an already-shrunk number.
+    expense_no_cuts = inp.monthly_expenses * 12
+
     # Age(s) at which each child turns 18 -- i.e. the point at which the
     # education lump sum has already been set aside (via the discrete goal
     # outflow), so the recurring monthly expense tied to that child is no
@@ -150,12 +158,12 @@ def run_deterministic_projection(inp: Inputs):
         is_retired = age >= inp.retirement_age
         ret_rate = inp.post_retirement_return if is_retired else inp.pre_retirement_return
 
-        # Each time a child turns 18, expenses step down 25% (permanently,
-        # compounding if more than one child turns 18) and that freed amount
-        # is redirected into savings.
+        # Each time a child turns 18, expenses step down 25% of that year's
+        # (uncut) expense level -- not of the already-reduced running value
+        # -- and that freed amount is redirected into savings.
         for turn18_age in child_turn18_ages:
             if age == turn18_age:
-                cut = annual_expense * 0.25
+                cut = expense_no_cuts * 0.25
                 annual_expense -= cut
                 diverted_to_savings += cut
 
@@ -179,6 +187,7 @@ def run_deterministic_projection(inp: Inputs):
             # lifestyle inflation compounds on top of general inflation, but
             # only while still working -- it stops the moment the client retires
             annual_expense *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
+            expense_no_cuts *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
             diverted_to_savings *= (1 + inp.general_inflation)
         else:
             # withdrawal grossed up for capital gains tax drag
@@ -201,6 +210,7 @@ def run_deterministic_projection(inp: Inputs):
                         shortfall_age = age
 
             annual_expense *= (1 + inp.general_inflation)
+            expense_no_cuts *= (1 + inp.general_inflation)
 
         rows.append({
             "age": age,
@@ -268,6 +278,7 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
         net_worth = inp.net_worth_liquid
         annual_savings = inp.monthly_savings * 12
         annual_expense = inp.monthly_expenses * 12
+        expense_no_cuts = inp.monthly_expenses * 12
         diverted_to_savings = 0.0
         survived = True
 
@@ -277,12 +288,12 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
             vol = return_vol_post if is_retired else return_vol_pre
             ret_rate = rng.normal(mean_ret, vol)
 
-            # Each time a child turns 18, expenses step down 25% (permanently,
-            # compounding if more than one child turns 18) and that freed
-            # amount is redirected into savings.
+            # Each time a child turns 18, expenses step down 25% of that
+            # year's (uncut) expense level -- not the already-reduced
+            # running value -- and that freed amount is redirected into savings.
             for turn18_age in child_turn18_ages:
                 if age == turn18_age:
-                    cut = annual_expense * 0.25
+                    cut = expense_no_cuts * 0.25
                     annual_expense -= cut
                     diverted_to_savings += cut
 
@@ -301,6 +312,7 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
                 net_worth = net_worth * (1 + ret_rate) + annual_savings + diverted_to_savings - goal_total - emi - parent_support - healthcare_loading
                 annual_savings *= (1 + inp.income_growth_rate)
                 annual_expense *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
+                expense_no_cuts *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
                 diverted_to_savings *= (1 + inp.general_inflation)
             else:
                 withdrawal_needed = annual_expense + healthcare_loading + goal_total + parent_support + emi
@@ -316,6 +328,7 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
                         survived = False
 
                 annual_expense *= (1 + inp.general_inflation)
+                expense_no_cuts *= (1 + inp.general_inflation)
 
         final_legacies.append(max(net_worth, 0))
         if survived:
