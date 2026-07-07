@@ -127,11 +127,36 @@ def run_deterministic_projection(inp: Inputs):
     annual_savings = inp.monthly_savings * 12
     annual_expense = inp.monthly_expenses * 12
 
+    # Age(s) at which each child turns 18 -- i.e. the point at which the
+    # education lump sum has already been set aside (via the discrete goal
+    # outflow), so the recurring monthly expense tied to that child is no
+    # longer needed.
+    child_turn18_ages = sorted(
+        inp.current_age + (child.education_age - child.current_age) for child in inp.children
+    )
+
+    # Amount of expense freed up (and redirected into savings) each year
+    # once one or more children have turned 18. This keeps compounding
+    # (inflating) alongside expenses, but only feeds into savings while the
+    # client is still working -- once retired there's no "monthly savings"
+    # to redirect into, and the reduction has already permanently lowered
+    # annual_expense (which is what retirement withdrawals are based on).
+    diverted_to_savings = 0.0
+
     shortfall_age = None
 
     for age in range(inp.current_age, inp.life_expectancy + 1):
         is_retired = age >= inp.retirement_age
         ret_rate = inp.post_retirement_return if is_retired else inp.pre_retirement_return
+
+        # Each time a child turns 18, expenses step down 25% (permanently,
+        # compounding if more than one child turns 18) and that freed amount
+        # is redirected into savings.
+        for turn18_age in child_turn18_ages:
+            if age == turn18_age:
+                cut = annual_expense * 0.25
+                annual_expense -= cut
+                diverted_to_savings += cut
 
         goals = goal_outflow_for_year(age, inp)
         goal_total = sum(goals.values())
@@ -146,11 +171,12 @@ def run_deterministic_projection(inp: Inputs):
             healthcare_loading = (annual_expense * 0.08) * (1 + inp.healthcare_inflation) ** years_post_60
 
         if not is_retired:
-            inflow = annual_savings
+            inflow = annual_savings + diverted_to_savings
             outflow = goal_total + emi + parent_support + healthcare_loading
             net_worth = net_worth * (1 + ret_rate) + inflow - outflow
             annual_savings *= (1 + inp.income_growth_rate)
             annual_expense *= (1 + inp.general_inflation)
+            diverted_to_savings *= (1 + inp.general_inflation)
         else:
             # withdrawal grossed up for capital gains tax drag
             withdrawal_needed = annual_expense + healthcare_loading + goal_total + parent_support + emi
@@ -228,10 +254,18 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
 
     rng = np.random.default_rng(42)
 
+    # Age(s) at which each child turns 18 (same logic as the deterministic
+    # projection) -- deterministic given ages, so computed once outside the
+    # simulation loop.
+    child_turn18_ages = sorted(
+        inp.current_age + (child.education_age - child.current_age) for child in inp.children
+    )
+
     for _ in range(n_sims):
         net_worth = inp.net_worth_liquid
         annual_savings = inp.monthly_savings * 12
         annual_expense = inp.monthly_expenses * 12
+        diverted_to_savings = 0.0
         survived = True
 
         for age in range(inp.current_age, inp.life_expectancy + 1):
@@ -239,6 +273,15 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
             mean_ret = inp.post_retirement_return if is_retired else inp.pre_retirement_return
             vol = return_vol_post if is_retired else return_vol_pre
             ret_rate = rng.normal(mean_ret, vol)
+
+            # Each time a child turns 18, expenses step down 25% (permanently,
+            # compounding if more than one child turns 18) and that freed
+            # amount is redirected into savings.
+            for turn18_age in child_turn18_ages:
+                if age == turn18_age:
+                    cut = annual_expense * 0.25
+                    annual_expense -= cut
+                    diverted_to_savings += cut
 
             goals = goal_outflow_for_year(age, inp)
             goal_total = sum(goals.values())
@@ -252,9 +295,10 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
                 healthcare_loading = (annual_expense * 0.08) * (1 + inp.healthcare_inflation) ** years_post_60
 
             if not is_retired:
-                net_worth = net_worth * (1 + ret_rate) + annual_savings - goal_total - emi - parent_support - healthcare_loading
+                net_worth = net_worth * (1 + ret_rate) + annual_savings + diverted_to_savings - goal_total - emi - parent_support - healthcare_loading
                 annual_savings *= (1 + inp.income_growth_rate)
                 annual_expense *= (1 + inp.general_inflation)
+                diverted_to_savings *= (1 + inp.general_inflation)
             else:
                 withdrawal_needed = annual_expense + healthcare_loading + goal_total + parent_support + emi
                 withdrawal_grossed_up = withdrawal_needed / (1 - inp.capital_gains_tax_rate)
@@ -291,13 +335,14 @@ with st.sidebar:
     life_expectancy = st.number_input("Life expectancy", retirement_age + 1, 100, 85)
 
     st.header("Net Worth & Cash Flow")
-    net_worth_liquid = st.number_input("Liquid / investable net worth (₹)", 0, value=5_00_00_000, step=1_00_000, format="%d")
+    net_worth_liquid = st.number_input("Liquid / investable net worth (₹)", 0, value=2_00_00_000, step=1_00_000, format="%d")
     net_worth_illiquid = st.number_input("Illiquid assets — house, etc. (₹, excluded from retirement corpus)", 0, value=2_00_00_000, step=1_00_000, format="%d")
-    monthly_savings = st.number_input("Current monthly savings (₹)", 0, value=2_00_000, step=10_000, format="%d")
-    monthly_expenses = st.number_input("Current monthly expenses (₹)", 0, value=3_00_000, step=10_000, format="%d")
+    monthly_savings = st.number_input("Current monthly savings (₹)", 0, value=1_50_000, step=10_000, format="%d")
+    monthly_expenses = st.number_input("Current monthly expenses (₹)", 0, value=2_50_000, step=10_000, format="%d")
+    st.caption("Once each child turns 18, expenses step down 25% (permanently) and that amount shifts into savings until retirement — the education lump sum is already accounted for separately below.")
 
     st.header("Return & Inflation Assumptions")
-    pre_retirement_return = st.slider("Pre-retirement return (%)", 4.0, 16.0, 12.0) / 100
+    pre_retirement_return = st.slider("Pre-retirement return (%)", 4.0, 16.0, 10.0) / 100
     post_retirement_return = st.slider("Post-retirement return (%)", 3.0, 12.0, 7.5) / 100
     income_growth_rate = st.slider("Annual savings growth (%)", 0.0, 15.0, 10.0) / 100
     general_inflation = st.slider("General inflation (%)", 2.0, 10.0, 6.0) / 100
@@ -338,8 +383,8 @@ with st.sidebar:
             name = st.text_input(f"Name", value=f"Child {i+1}", key=f"name_{i}")
             default_age = default_ages[i] if i < len(default_ages) else 5
             c_age = st.number_input(f"Current age", 0, 25, default_age, key=f"age_{i}")
-            edu_cost = st.number_input(f"Education cost, today's value (₹, at age 18)", 0, value=2_00_00_000, step=1_00_000, format="%d", key=f"edu_{i}")
-            marriage_cost = st.number_input(f"Marriage cost, today's value (₹, at age 25)", 0, value=1_00_00_000, step=1_00_000, format="%d", key=f"marriage_{i}")
+            edu_cost = st.number_input(f"Education cost, today's value (₹, at age 18)", 0, value=1_00_00_000, step=1_00_000, format="%d", key=f"edu_{i}")
+            marriage_cost = st.number_input(f"Marriage cost, today's value (₹, at age 25)", 0, value=50_00_000, step=1_00_000, format="%d", key=f"marriage_{i}")
             children.append(Child(name=name, current_age=c_age, education_cost_today=edu_cost, marriage_cost_today=marriage_cost))
 
     run_button = st.button("Calculate", type="primary", use_container_width=True)
