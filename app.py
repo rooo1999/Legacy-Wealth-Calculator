@@ -217,6 +217,7 @@ def run_deterministic_projection(inp: Inputs):
             "phase": "Retirement" if is_retired else "Accumulation",
             "net_worth": net_worth,
             "annual_savings": annual_savings if not is_retired else 0,
+            "expense_reduction_to_savings": diverted_to_savings if not is_retired else 0,
             "annual_expense": annual_expense,
             "education_outflow": goals["education"],
             "marriage_outflow": goals["marriage"],
@@ -514,7 +515,7 @@ if run_button or "has_run" in st.session_state:
     # ── Full data table ──
     with st.expander("📊 Full year-by-year projection"):
         display_df = df.copy()
-        for c in ["net_worth", "annual_savings", "annual_expense", "education_outflow",
+        for c in ["net_worth", "annual_savings", "expense_reduction_to_savings", "annual_expense", "education_outflow",
                   "marriage_outflow", "car_outflow", "house_outflow", "healthcare_loading"]:
             display_df[c] = display_df[c].round(0).astype("int64")
         st.dataframe(display_df, use_container_width=True, height=400)
