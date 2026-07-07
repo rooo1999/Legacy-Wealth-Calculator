@@ -43,7 +43,6 @@ class Inputs:
     post_retirement_return: float
     income_growth_rate: float
     general_inflation: float
-    lifestyle_inflation: float
     education_inflation: float
     car_inflation: float
     healthcare_inflation: float
@@ -176,9 +175,7 @@ def run_deterministic_projection(inp: Inputs):
             outflow = goal_total + emi + parent_support + healthcare_loading
             net_worth = net_worth * (1 + ret_rate) + inflow - outflow
             annual_savings *= (1 + inp.income_growth_rate)
-            # lifestyle inflation compounds on top of general inflation, but
-            # only while still working -- it stops the moment the client retires
-            annual_expense *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
+            annual_expense *= (1 + inp.general_inflation)
             diverted_to_savings *= (1 + inp.general_inflation)
         else:
             # withdrawal grossed up for capital gains tax drag
@@ -300,7 +297,7 @@ def run_monte_carlo(inp: Inputs, n_sims: int = 500, return_vol_pre: float = 0.16
             if not is_retired:
                 net_worth = net_worth * (1 + ret_rate) + annual_savings + diverted_to_savings - goal_total - emi - parent_support - healthcare_loading
                 annual_savings *= (1 + inp.income_growth_rate)
-                annual_expense *= (1 + inp.general_inflation) * (1 + inp.lifestyle_inflation)
+                annual_expense *= (1 + inp.general_inflation)
                 diverted_to_savings *= (1 + inp.general_inflation)
             else:
                 withdrawal_needed = annual_expense + healthcare_loading + goal_total + parent_support + emi
@@ -349,8 +346,6 @@ with st.sidebar:
     post_retirement_return = st.slider("Post-retirement return (%)", 3.0, 12.0, 7.5) / 100
     income_growth_rate = st.slider("Annual savings growth (%)", 0.0, 15.0, 10.0) / 100
     general_inflation = st.slider("General inflation (%)", 2.0, 10.0, 6.0) / 100
-    lifestyle_inflation = st.slider("Lifestyle inflation, pre-retirement only (%)", 0.0, 15.0, 5.0) / 100
-    st.caption("Lifestyle inflation compounds on top of general inflation while working, and stops the moment the client retires.")
     education_inflation = st.slider("Education inflation (%)", 4.0, 16.0, 10.0) / 100
     car_inflation = st.slider("Car cost inflation (%)", 2.0, 12.0, 5.0) / 100
     healthcare_inflation = st.slider("Healthcare inflation (post-60, %)", 4.0, 18.0, 4.0) / 100
@@ -407,7 +402,6 @@ if run_button or "has_run" in st.session_state:
         monthly_savings=monthly_savings, monthly_expenses=monthly_expenses,
         pre_retirement_return=pre_retirement_return, post_retirement_return=post_retirement_return,
         income_growth_rate=income_growth_rate, general_inflation=general_inflation,
-        lifestyle_inflation=lifestyle_inflation,
         education_inflation=education_inflation, car_inflation=car_inflation,
         healthcare_inflation=healthcare_inflation,
         owns_house=owns_house, house_target_cost_today=house_target_cost_today, house_purchase_age=house_purchase_age,
